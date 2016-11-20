@@ -1,0 +1,15 @@
+Primer aplicación realizada con Vert.x
+
+- Requiere Maven y Java 8 instalado y configurado.
+- Se desarrollo un Verticle que extiende de AbstractVerticle.
+- Implementa el método start() recibiendo un Future como parámetro.
+    - Al extender de AbstractVerticle tiene acceso a la propiedad vertx
+    - Crea un server y hace un listen (puerto 8080)
+    - Por medio del Handler llama un lambda devolviendo un resultado por cada request
+    - No se implementa el método close()
+- Se agrego JUnit y Vertx-unit para realizar la prueba de test del servicio
+    - mvn clean test
+- Se utilizó maven-shade-plugin para hacer un 'fat jar' con todas las dependencias necesarias
+    - `mvn clean package`
+    - `java -jar target\primer-vertx-1.0-SNAPSHOT-fat.jar`
+
