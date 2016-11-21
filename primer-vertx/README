@@ -18,3 +18,8 @@ Primer aplicación realizada con Vert.x
     - Luego de empaquetar la aplicación con `mvn package` ejecutar:
         - `java -jar target\primer-vertx-1.0-SNAPSHOT-fat.jar -conf src\main\conf\mi-aplicacion-config.json`
         - Abrir en el browser http://localhost:8082
+
+- Se agrega la extensión Vert.x Web hace mas extensible el manejo HTTP
+    - Se creó el objeto Router, el encargado de enviar las solicitudes HTTP al controlador correspondiente.
+    - Routes, definir cómo se envian las rutas.
+    - Handler, acción de procesar las solicitudes y escribir el resultado.

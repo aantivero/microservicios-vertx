@@ -14,6 +14,11 @@
             <artifactId>vertx-core</artifactId>
             <version>${vertx.version}</version>
         </dependency>
+        <dependency>
+            <groupId>io.vertx</groupId>
+            <artifactId>vertx-web</artifactId>4
+            <version>${vertx.version}</version>
+        </dependency>
         <!--Test -->
         <dependency>
             <groupId>junit</groupId>
