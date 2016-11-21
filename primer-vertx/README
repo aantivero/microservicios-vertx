@@ -31,3 +31,8 @@ Primer aplicación realizada con Vert.x
 - Se agregaron los routes con sus correspondientes handlers.
 
 - Se realiza las pruebas unitarias del CRUD REST.
+
+- Plan de Test:
+    - reservar un puerto, generar configuración de aplicación, iniciar aplicación, ejecutar tests de integración, finalizar aplicación.
+    - Manejo de configuración para plan de ejecución con Maven
+    - 
