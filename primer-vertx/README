@@ -9,7 +9,12 @@ Primer aplicación realizada con Vert.x
     - No se implementa el método close()
 - Se agrego JUnit y Vertx-unit para realizar la prueba de test del servicio
     - mvn clean test
-- Se utilizó maven-shade-plugin para hacer un 'fat jar' con todas las dependencias necesarias
+- Se utilizó maven-shade-plugin para hacer un 'fat jar' con todas las dependencias necesarias (https://maven.apache.org/plugins/maven-shade-plugin/)
     - `mvn clean package`
     - `java -jar target\primer-vertx-1.0-SNAPSHOT-fat.jar`
-
+- Utilizo config() como medio para poder configurar el puerto de escucha de la aplicación
+    - Modifico el test para que el puerto sea random
+    - Se incluye archivo de configuración `mi-aplicacion-config.json`
+    - Luego de empaquetar la aplicación con `mvn package` ejecutar:
+        - `java -jar target\primer-vertx-1.0-SNAPSHOT-fat.jar -conf src\main\conf\mi-aplicacion-config.json`
+        - Abrir en el browser http://localhost:8082

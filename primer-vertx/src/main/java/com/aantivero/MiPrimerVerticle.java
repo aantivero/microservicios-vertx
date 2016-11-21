@@ -20,12 +20,14 @@ public class MiPrimerVerticle extends AbstractVerticle{
                 .requestHandler(r -> { //7 se le incorpora un handler que en este caso sera un lambda
                     r.response().end("<h1>Mi Primer Aplicacion con Vert.x</h1>"); //8 lambda qe se ejecuta ante cada request
                 })
-                .listen(8080, result -> { //9 se configura el puerto de escucha
-                    if (result.succeeded()) { //10 lambda de resultado
-                        future.complete();
-                    } else {
-                        future.fail(result.cause());
-                    }
+                .listen(
+                    config().getInteger("http.port", 8080), //11 el puerto se determina por configuración
+                    result -> { //9 se configura el puerto de escucha
+                        if (result.succeeded()) { //10 lambda de resultado
+                            future.complete();
+                        } else {
+                            future.fail(result.cause());
+                        }
                 });
     }
 
