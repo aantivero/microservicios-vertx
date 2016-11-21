@@ -76,7 +76,7 @@ public class MiPrimerVerticleTest {
         vertx.createHttpClient().getNow(port, "localhost", "/assets/index.html",
                 response -> {
                     context.assertEquals(response.statusCode(), 200);
-                    context.assertEquals(response.headers().get("content-type"), "text/html;charset=UTF-8");
+                    context.assertTrue(response.headers().get("content-type").contains("text/html"));
                     response.bodyHandler(body -> {
                        context.assertTrue(body.toString().contains("Instrumentos"));
                         async.complete();

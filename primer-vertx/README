@@ -35,4 +35,8 @@ Primer aplicación realizada con Vert.x
 - Plan de Test:
     - reservar un puerto, generar configuración de aplicación, iniciar aplicación, ejecutar tests de integración, finalizar aplicación.
     - Manejo de configuración para plan de ejecución con Maven
-    - 
+    - Configurado apache-antrun para iniciar y detener la aplicación
+    - Se utiliza maven-failsafe-plugin para ejecutar integration-test `mvn clean verify`
+    - AssertJ para fluent assertions
+    - Rest-Assured es un framework para testear REST API
+    - Agrego un profile para Windows para ejecutar los test de integración
