@@ -23,3 +23,5 @@ Primer aplicación realizada con Vert.x
     - Se creó el objeto Router, el encargado de enviar las solicitudes HTTP al controlador correspondiente.
     - Routes, definir cómo se envian las rutas.
     - Handler, acción de procesar las solicitudes y escribir el resultado.
+
+- Se crea una entrada nueva en el router para poder devolver contenido estático.

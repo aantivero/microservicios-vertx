@@ -4,6 +4,7 @@ import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Future;
 import io.vertx.core.http.HttpServerResponse;
 import io.vertx.ext.web.Router;
+import io.vertx.ext.web.handler.StaticHandler;
 
 /**
  * Primer aplicacion vertx.
@@ -27,6 +28,10 @@ public class MiPrimerVerticle extends AbstractVerticle{
                     .putHeader("content-type", "text/html")
                     .end("<h1>Mi Primer Aplicacion con Vert.x</h1>");
         });
+
+        //devolver contenido estático desde el directorio /assets
+        router.route("/assets/*").handler(StaticHandler.create("assets"));
+
         //2 al extender de AbstractVerticle ya tengo la propiedad vertx
         vertx
                 .createHttpServer() //6 se crea un HTTP Server

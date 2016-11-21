@@ -16,7 +16,7 @@
         </dependency>
         <dependency>
             <groupId>io.vertx</groupId>
-            <artifactId>vertx-web</artifactId>4
+            <artifactId>vertx-web</artifactId>
             <version>${vertx.version}</version>
         </dependency>
         <!--Test -->

@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Instrumentos</title>
+    <!--JQuery -->
+    <script src="//code.jquery.com/jquery-3.1.1.min.js"></script>
+    <!-- Latest compiled and minified CSS Bootstrap-->
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
+    <!-- Optional theme Bootstrap-->
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap-theme.min.css" integrity="sha384-rHyoN1iRsVXV4nD0JutlnGaslCJuC7uwjduW9SVrLvRYooPp2bWYgmgJQIXwl/Sp" crossorigin="anonymous">
+    <!-- Latest compiled and minified JavaScript Bootstrap-->
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa" crossorigin="anonymous"></script>
+</head>
+<body>
+    <div class="container" role="main">
+        <div class="jumbotron">
+            <h1>Instrumentos</h1>
+            <p>Colecci&oacute;n de Instrumentos negociables</p>
+        </div>
+        <div class="page-header">
+            <div class="row">
+                <div class="col-md-12">
+                    <h1>Mis Instrumentos</h1>
+                    <button class="pull-right btn btn-primary product-add" data-action="add" data-toggle="modal"
+                            data-target="#instrumentoModal">
+                        <span class="glyphicon glyphicon-plus"></span> Nuevo Instrumento
+                    </button>
+                    <table class="table table-striped">
+                        <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>C&oacute;digo</th>
+                            <th>Descripci&oacute;n</th>
+                            <th>Acciones</th>
+                        </tr>
+                        </thead>
+                        <tbody id="content">
+                        <!-- cargado por medio de Ajax -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+        $(function(){
+            load();
+            initModal();
+        });
+
+        function create(codigo, descripcion) {
+            $.post("/api/instrumentos", JSON.stringify({codigo: codigo, descripcion: descripcion}), function () {
+                load();
+            }, "json");
+        }
+
+        function remove(id) {
+            $.ajax({
+                method: "DELETE",
+                url: "/api/instrumentos/" + id
+            }).done(function() {
+                load();
+            });
+        }
+
+        function update(id, codigo, descripcion) {
+            $.ajax({
+                method: "UPDATE",
+                url: "/api/instrumentos/" + id,
+                data: JSON.stringify({codigo: codigo, descripcion: descripcion})
+            }).done(function() {
+                load();
+            });
+        }
+
+        function load() {
+            $("#content").children().remove();
+            $.getJSON("/api/instrumentos", function(data) {
+                $.each(data, function(key, val) {
+                    $("<tr><td>" + val.id + "</td><td>" + val.codigo + "</td><td>" + val.descripcion + "</td>" +
+                            "<td>" +
+                            "<button data-action='edit' class='btn btn-primary btn-sm product-edit' " +
+                            "data-toggle='modal' " +
+                            "data-target='#instrumentoModal' " +
+                            "data-name='" + val.codigo + "' " +
+                            "data-origin='" + val.descripcion + "' " +
+                            "data-id='" + val.id + "'>" +
+                            "<span class='glyphicon glyphicon-pencil'></span>" +
+                            "</button>" +
+                            "&nbsp;" +
+                            "<button class='btn btn-danger btn-sm instrumento-delete' data-id='" + val.id + "'>" +
+                            "   <span class='glyphicon glyphicon-minus'></span>" +
+                            "</button>" +
+                            "</td>" +
+                            "</tr>").appendTo("#content");
+                });
+                initCallbacks();
+            });
+        }
+
+        function initCallbacks() {
+            $(".instrumento-delete").unbind().click(function() {
+               var id = $(this).data("id");
+                remove(id);
+            });
+        }
+
+        function initModal() {
+            $("#instrumentoModal").on('show.bs.modal', function (event) {
+                var button = $(event.relatedTarget);
+                var action = button.data('action');
+                var id = button.data('id');
+                var instrumentoAction = $("#instrumentoAction");
+                instrumentoAction.unbind();
+                var modal = $(this);
+                if (action === "add") {
+                    modal.find('.modal-title').text("Agregar Instrumento");
+                    modal.find('#instrumento-codigo').val("");
+                    modal.find('#instrumento-descripcion').val("");
+                    instrumentoAction.click(function () {
+                        create($("#instrumento-codigo").val(), $("#instrumento-descripcion").val());
+                        $('#instrumentoModal').modal('toggle');
+                    });
+                } else {
+                    modal.find('.modal-title').text("Editar Instrumento");
+                    modal.find('#instrumento-codigo').val(button.data("codigo"));
+                    modal.find('#instrumento-descripcion').val(button.data("descripcion"));
+                    instrumentoAction.click(function () {
+                        update(id, $("#instrumento-codigo").val(), $("#instrumento-descripcion").val());
+                        $('#instrumentoModal').modal('toggle');
+                    });
+                }
+            });
+        }
+    </script>
+    <div class="modal fade" id="instrumentoModal" tabindex="-1" role="dialog">
+        <div class="modal-dialog" role="dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+                    <h4 class="modal-title" id="instrumentoModalTitle">Agregar Instrumento</h4>
+                </div>
+                <div class="modal-body">
+                    <form>
+                        <div class="form-group">
+                            <label for="instrumento-codigo" class="control-label">C&oacute;digo:</label>
+                            <input type="text" class="form-control" id="instrumento-codigo">
+                        </div>
+                        <div class="form-group">
+                            <label for="instrumento-descripcion" class="control-label">Descripci&oacute;n:</label>
+                            <input type="text" class="form-control" id="instrumento-descripcion">
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-default" data-dismiss="modal">Cancelar</button>
+                    <button type="button" id="instrumentoAction" class="btn btn-primary">Guardar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
