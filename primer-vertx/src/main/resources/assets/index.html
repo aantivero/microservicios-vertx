@@ -66,7 +66,7 @@
 
         function update(id, codigo, descripcion) {
             $.ajax({
-                method: "UPDATE",
+                method: "PUT",
                 url: "/api/instrumentos/" + id,
                 data: JSON.stringify({codigo: codigo, descripcion: descripcion})
             }).done(function() {

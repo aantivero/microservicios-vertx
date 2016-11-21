@@ -3,20 +3,32 @@ package com.aantivero;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Future;
 import io.vertx.core.http.HttpServerResponse;
+import io.vertx.core.json.Json;
+import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.Router;
+import io.vertx.ext.web.RoutingContext;
+import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.ext.web.handler.StaticHandler;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /**
  * Primer aplicacion vertx.
  * 1 En Vertx un Verticle es un componente
  * Created by alejandro on 20/11/2016.
  */
-public class MiPrimerVerticle extends AbstractVerticle{
+public class MiPrimerVerticle extends AbstractVerticle {
+
+    //persistencia de instrumentos
+    private Map<Integer, Instrumento> instrumentos = new LinkedHashMap<>();
 
     //3 este método es llamado cuando el verticle es deployado
     //5 el Future se utiliza para indicar si fue completado o no
     @Override
     public void start(Future<Void> future) {
+        //cargar instrumentos
+        createSomeData();
         //crear el objeto Router
         //Es el responsable de enviar las solicitudes HTTP al controlador correcto
         Router router = Router.router(vertx);
@@ -32,6 +44,16 @@ public class MiPrimerVerticle extends AbstractVerticle{
         //devolver contenido estático desde el directorio /assets
         router.route("/assets/*").handler(StaticHandler.create("assets"));
 
+        //routes de instrumentos
+        router.get("/api/instrumentos").handler(this::getAll);
+        //habilita la lectura del request body para todas las rutas dentro '/api/instrumentos'
+        //la forma de habilitar de manera global sería router.route().handler(BodyHandler.create())
+        router.route("/api/instrumentos*").handler(BodyHandler.create());
+        router.post("/api/instrumentos").handler(this::addInstrumento);
+        router.get("/api/instrumentos/:id").handler(this::getInstrumento);
+        router.put("/api/instrumentos/:id").handler(this::updateInstrumento);
+        router.delete("/api/instrumentos/:id").handler(this::deleteInstrumento);
+
         //2 al extender de AbstractVerticle ya tengo la propiedad vertx
         vertx
                 .createHttpServer() //6 se crea un HTTP Server
@@ -45,6 +67,79 @@ public class MiPrimerVerticle extends AbstractVerticle{
                             future.fail(result.cause());
                         }
                 });
+    }
+
+    private void updateInstrumento(RoutingContext routingContext) {
+        final String id = routingContext.request().getParam("id");
+        JsonObject json = routingContext.getBodyAsJson();
+        if (id == null || json == null) {
+            routingContext.response().setStatusCode(400).end();
+        } else {
+            final Integer idInteger = Integer.valueOf(id);
+            Instrumento instrumento = instrumentos.get(idInteger);
+            if (instrumento == null) {
+                routingContext.response().setStatusCode(404).end();
+            } else {
+                instrumento.setCodigo(json.getString("codigo"));
+                instrumento.setDescripcion(json.getString("descripcion"));
+                routingContext.response()
+                        .putHeader("content-type", "application/json; charset=utf-8")
+                        .end(Json.encodePrettily(instrumento));
+            }
+        }
+    }
+
+    private void getInstrumento(RoutingContext routingContext) {
+        final String id = routingContext.request().getParam("id");
+        if (id == null) {
+            routingContext.response().setStatusCode(404).end();
+        } else {
+            final Integer idInteger = Integer.valueOf(id);
+            Instrumento instrumento = instrumentos.get(idInteger);
+            if (instrumento == null) {
+                routingContext.response().setStatusCode(404).end();
+            } else {
+                routingContext.response()
+                        .putHeader("content-type", "application/json; charset=utf-8")
+                        .end(Json.encodePrettily(instrumento));
+            }
+        }
+    }
+
+    private void deleteInstrumento(RoutingContext routingContext) {
+        //obtengo el parametro del request
+        String id = routingContext.request().getParam("id");
+        if (id == null) {
+            routingContext.response().setStatusCode(400).end(); //no se encuentra recurso
+        } else {
+            Integer idInteger = Integer.valueOf(id);
+            instrumentos.remove(idInteger);
+        }
+        routingContext.response().setStatusCode(204).end(); //NO - CONTENT
+    }
+
+    private void addInstrumento(RoutingContext routingContext) {
+        //obtengo el instrumento del request body
+        final Instrumento instrumento = Json.decodeValue(routingContext.getBodyAsString(), Instrumento.class);
+        instrumentos.put(instrumento.getId(), instrumento);
+        routingContext.response()
+                .setStatusCode(201) //creado
+                .putHeader("content-type", "application/json; charset=utf-8")
+                .end(Json.encodePrettily(instrumento));
+    }
+
+    private void createSomeData() {
+        //crear algunos instrumentos
+        Instrumento ins1 = new Instrumento("GALC", "Galicia 24hs");
+        instrumentos.put(ins1.getId(), ins1);
+        Instrumento ins2 = new Instrumento("EDEN", "Edenor 72hs");
+        instrumentos.put(ins2.getId(), ins2);
+    }
+
+    private void getAll(RoutingContext routingContext) {
+        routingContext.response()
+                .putHeader("content-type", "application/json; charset=utf-8")
+                .end(Json.encodePrettily(instrumentos.values()));
     }
 
     //4 podemos implementar el método close() pero no es muy recomendable
