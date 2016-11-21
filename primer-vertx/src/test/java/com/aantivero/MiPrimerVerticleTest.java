@@ -2,6 +2,7 @@ package com.aantivero;
 
 import io.vertx.core.DeploymentOptions;
 import io.vertx.core.Vertx;
+import io.vertx.core.json.Json;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.unit.Async;
 import io.vertx.ext.unit.TestContext;
@@ -67,5 +68,42 @@ public class MiPrimerVerticleTest {
                         async.complete();
                     });
                 });
+    }
+
+    @Test
+    public void testIndexStaticPage(TestContext context) {
+        final Async async = context.async();
+        vertx.createHttpClient().getNow(port, "localhost", "/assets/index.html",
+                response -> {
+                    context.assertEquals(response.statusCode(), 200);
+                    context.assertEquals(response.headers().get("content-type"), "text/html;charset=UTF-8");
+                    response.bodyHandler(body -> {
+                       context.assertTrue(body.toString().contains("Instrumentos"));
+                        async.complete();
+                    });
+                });
+    }
+
+    @Test
+    public void testAgregarInstrumento(TestContext context) {
+        final Async async = context.async();
+        final String json = Json.encodePrettily(new Instrumento("Test01", "Descripcion Test 01"));
+        final String length = Integer.toString(json.length());
+        vertx.createHttpClient().post(port, "localhost", "/api/instrumentos")
+                .putHeader("content-type", "application/json")
+                .putHeader("content-length", length)
+                .handler(response -> {
+                    context.assertEquals(response.statusCode(), 201);
+                    context.assertTrue(response.headers().get("content-type").contains("application/json"));
+                    response.bodyHandler(body -> {
+                       final Instrumento instrumento = Json.decodeValue(body.toString(), Instrumento.class);
+                        context.assertEquals(instrumento.getCodigo(), "Test01");
+                        context.assertEquals(instrumento.getDescripcion(), "Descripcion Test 01");
+                        context.assertNotNull(instrumento.getId());
+                        async.complete();
+                    });
+                })
+                .write(json)
+                .end();
     }
 }
