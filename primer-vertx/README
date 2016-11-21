@@ -29,3 +29,5 @@ Primer aplicación realizada con Vert.x
 - Se creo un CRUD para un objeto de dominio llamado 'instrumento'.
 - La persistencia es en memoria
 - Se agregaron los routes con sus correspondientes handlers.
+
+- Se realiza las pruebas unitarias del CRUD REST.
