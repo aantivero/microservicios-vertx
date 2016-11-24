@@ -1,10 +1,14 @@
 package com.aantivero;
 
 import io.vertx.core.AbstractVerticle;
+import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
+import io.vertx.core.Handler;
 import io.vertx.core.http.HttpServerResponse;
 import io.vertx.core.json.Json;
 import io.vertx.core.json.JsonObject;
+import io.vertx.ext.jdbc.JDBCClient;
+import io.vertx.ext.sql.SQLConnection;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.BodyHandler;
@@ -23,10 +27,30 @@ public class MiPrimerVerticle extends AbstractVerticle {
     //persistencia de instrumentos
     private Map<Integer, Instrumento> instrumentos = new LinkedHashMap<>();
 
+    private JDBCClient jdbc;
+
     //3 este método es llamado cuando el verticle es deployado
     //5 el Future se utiliza para indicar si fue completado o no
     @Override
     public void start(Future<Void> future) {
+        //crear e inicializar la instancia JDBCClient
+        //en configuracion agregar los parametros url y driver_class
+        jdbc = JDBCClient.createShared(vertx, config(), "instrumentos-datos");
+
+        //iniciar la aplicacion asincronicamente
+        /**
+         * todos cumplen el mismo patron:
+         *      1) chequear si la ultima operacion fue exitosa
+         *      2) realizar tarea
+         *      3) llamar al proximo paso
+         */
+        iniciarBackend(
+                (connection) -> crearDatos(connection,
+                        (nothing) -> iniciarAplicacionWeb(
+                                (http) -> completarInicio(http, future)
+                        ), future
+                ), future);
+
         //cargar instrumentos
         createSomeData();
         //crear el objeto Router
@@ -67,6 +91,27 @@ public class MiPrimerVerticle extends AbstractVerticle {
                             future.fail(result.cause());
                         }
                 });
+    }
+
+    //recupera el SQLConnection y luego llama al proximo (next step)
+    private void iniciarBackend(Handler<AsyncResult<SQLConnection>> next, Future<Void> future) {
+        jdbc.getConnection(ar -> {
+            if (ar.failed()) {
+                future.fail(ar.cause());
+            } else {
+                next.handle(Future.succeededFuture(ar.result()));
+            }
+        });
+    }
+
+    //crear la tabla (si no existe) y algunos datos
+    private void crearDatos(AsyncResult<SQLConnection> result,
+                            Handler<AsyncResult<Void>> next, Future<Void> future) {
+        if (result.failed()) {
+            future.fail(result.cause());
+        } else {
+            SQLConnection connection = result.result();
+        }
     }
 
     private void updateInstrumento(RoutingContext routingContext) {

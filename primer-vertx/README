@@ -40,3 +40,6 @@ Primer aplicación realizada con Vert.x
     - AssertJ para fluent assertions
     - Rest-Assured es un framework para testear REST API
     - Agrego un profile para Windows para ejecutar los test de integración
+
+- JDBC Asincronico:
+    - Utilizando vertc-jdbc-client y hsqldb
