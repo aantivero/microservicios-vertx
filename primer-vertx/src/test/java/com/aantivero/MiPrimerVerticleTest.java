@@ -37,7 +37,10 @@ public class MiPrimerVerticleTest {
         socket.close();
 
         DeploymentOptions deploymentOptions = new DeploymentOptions()//utiliza json como medio de configuracion
-                .setConfig(new JsonObject().put("http.port", port));
+                .setConfig(new JsonObject()
+                        .put("http.port", port)
+                        .put("url", "jdbc:hsqldb:mem:test?shutdown=true")//configuracion bbdd para test en memoria
+                        .put("driver_class","org.hsqldb.jdbcDriver"));
 
         vertx.deployVerticle(MiPrimerVerticle.class.getName(),
                 deploymentOptions,

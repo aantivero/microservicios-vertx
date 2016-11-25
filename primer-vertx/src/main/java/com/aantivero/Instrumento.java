@@ -1,5 +1,7 @@
 package com.aantivero;
 
+import io.vertx.core.json.JsonObject;
+
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -8,8 +10,6 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class Instrumento {
 
-    private static final AtomicInteger COUNTER = new AtomicInteger();
-
     private final int id;
 
     private String codigo;
@@ -17,13 +17,25 @@ public class Instrumento {
     private String descripcion;
 
     public Instrumento(String codigo, String descripcion) {
-        this.id = COUNTER.getAndIncrement();
+        this.id = -1;
         this.codigo = codigo;
         this.descripcion = descripcion;
     }
 
+    public Instrumento(Integer id, String codigo, String descripcion) {
+        this.id = id;
+        this.codigo = codigo;
+        this.descripcion = descripcion;
+    }
+
+    public Instrumento(JsonObject json) {
+        this.codigo = json.getString("CODIGO");
+        this.descripcion = json.getString("DESCRIPCION");
+        this.id = json.getInteger("ID");
+    }
+
     public Instrumento() {
-        this.id = COUNTER.getAndIncrement();
+        this.id = -1;
     }
 
     public int getId() {

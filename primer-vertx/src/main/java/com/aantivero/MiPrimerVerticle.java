@@ -4,18 +4,23 @@ import io.vertx.core.AbstractVerticle;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
+import io.vertx.core.http.HttpServer;
 import io.vertx.core.http.HttpServerResponse;
 import io.vertx.core.json.Json;
+import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.jdbc.JDBCClient;
 import io.vertx.ext.sql.SQLConnection;
+import io.vertx.ext.sql.UpdateResult;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.ext.web.handler.StaticHandler;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * Primer aplicacion vertx.
@@ -23,9 +28,6 @@ import java.util.Map;
  * Created by alejandro on 20/11/2016.
  */
 public class MiPrimerVerticle extends AbstractVerticle {
-
-    //persistencia de instrumentos
-    private Map<Integer, Instrumento> instrumentos = new LinkedHashMap<>();
 
     private JDBCClient jdbc;
 
@@ -50,9 +52,92 @@ public class MiPrimerVerticle extends AbstractVerticle {
                                 (http) -> completarInicio(http, future)
                         ), future
                 ), future);
+    }
 
-        //cargar instrumentos
-        createSomeData();
+    @Override
+    public void stop() throws Exception {
+        //cierre de la conexion
+        jdbc.close();
+    }
+
+    //recupera el SQLConnection y luego llama al proximo (next step)
+    private void iniciarBackend(Handler<AsyncResult<SQLConnection>> next, Future<Void> future) {
+        jdbc.getConnection(ar -> {
+            if (ar.failed()) {
+                future.fail(ar.cause());
+            } else {
+                next.handle(Future.succeededFuture(ar.result()));
+            }
+        });
+    }
+
+    //crear la tabla (si no existe) y algunos datos
+    private void crearDatos(AsyncResult<SQLConnection> result,
+                            Handler<AsyncResult<Void>> next, Future<Void> future) {
+        if (result.failed()) {
+            future.fail(result.cause());
+        } else {
+            //siempre chequea en base a la conexion
+            SQLConnection connection = result.result();
+            connection.execute(
+                    "CREATE TABLE IF NOT EXISTS instrumento (id INTEGER IDENTITY, " +
+                            "codigo varchar(20), descripcion varchar(100))",
+                    ar -> {
+                        if (ar.failed()) {
+                            future.fail(ar.cause());
+                            connection.close();
+                            return;
+                        }
+                        connection.query("SELECT * FROM instrumento", select -> {
+                            if (select.failed()) {
+                                future.fail(select.cause());
+                                connection.close();
+                                return;
+                            }
+                            //si no hay datos en la tabla inserta 2 instrumentos
+                            if (select.result().getNumRows() == 0) {
+                                insertarDatos(
+                                        new Instrumento("GALC", "Galicia 24hs"),
+                                        connection,
+                                        (v) -> insertarDatos(
+                                                new Instrumento("EDEN", "Edenor 72hs"),
+                                                connection,
+                                                (r) -> {
+                                                    next.handle(Future.<Void>succeededFuture());
+                                                    connection.close();
+                                                }
+                                        )
+                                );
+                            } else {
+                                next.handle(Future.<Void>succeededFuture());
+                                connection.close();
+                            }
+                        });
+                    });
+        }
+    }
+
+    private void insertarDatos(Instrumento instrumento, SQLConnection connection, Handler<AsyncResult<Instrumento>> next) {
+        String sql = "INSERT INTO instrumento (codigo, descripcion) VALUES ?, ?";
+        //ejecuta el update con parametros, pasando los valores. este impide el SQL injection
+        connection.updateWithParams(sql,
+                new JsonArray().add(instrumento.getCodigo()).add(instrumento.getDescripcion()),
+                (ar) -> {
+                    if (ar.failed()) {
+                        next.handle(Future.failedFuture(ar.cause()));
+                        return;
+                    }
+                    UpdateResult result = ar.result();
+
+                    //crea un nuevo objeto de Instrumento con el id generado
+                    Instrumento instrumentoNuevo = new Instrumento(result.getKeys().getInteger(0),
+                            instrumento.getCodigo(), instrumento.getDescripcion());
+
+                    next.handle(Future.succeededFuture(instrumentoNuevo));
+                });
+    }
+
+    private void iniciarAplicacionWeb(Handler<AsyncResult<HttpServer>> next) {
         //crear el objeto Router
         //Es el responsable de enviar las solicitudes HTTP al controlador correcto
         Router router = Router.router(vertx);
@@ -83,34 +168,16 @@ public class MiPrimerVerticle extends AbstractVerticle {
                 .createHttpServer() //6 se crea un HTTP Server
                 .requestHandler(router::accept) //7 pasa el método "accept" al request handler
                 .listen(
-                    config().getInteger("http.port", 8080), //11 el puerto se determina por configuración
-                    result -> { //9 se configura el puerto de escucha
-                        if (result.succeeded()) { //10 lambda de resultado
-                            future.complete();
-                        } else {
-                            future.fail(result.cause());
-                        }
-                });
+                        config().getInteger("http.port", 8080), //11 el puerto se determina por configuración
+                        next::handle
+                );
     }
 
-    //recupera el SQLConnection y luego llama al proximo (next step)
-    private void iniciarBackend(Handler<AsyncResult<SQLConnection>> next, Future<Void> future) {
-        jdbc.getConnection(ar -> {
-            if (ar.failed()) {
-                future.fail(ar.cause());
-            } else {
-                next.handle(Future.succeededFuture(ar.result()));
-            }
-        });
-    }
-
-    //crear la tabla (si no existe) y algunos datos
-    private void crearDatos(AsyncResult<SQLConnection> result,
-                            Handler<AsyncResult<Void>> next, Future<Void> future) {
-        if (result.failed()) {
-            future.fail(result.cause());
+    private void completarInicio(AsyncResult<HttpServer> http, Future<Void> future) {
+        if (http.succeeded()) {
+            future.complete();
         } else {
-            SQLConnection connection = result.result();
+            future.fail(http.cause());
         }
     }
 
@@ -120,17 +187,18 @@ public class MiPrimerVerticle extends AbstractVerticle {
         if (id == null || json == null) {
             routingContext.response().setStatusCode(400).end();
         } else {
-            final Integer idInteger = Integer.valueOf(id);
-            Instrumento instrumento = instrumentos.get(idInteger);
-            if (instrumento == null) {
-                routingContext.response().setStatusCode(404).end();
-            } else {
-                instrumento.setCodigo(json.getString("codigo"));
-                instrumento.setDescripcion(json.getString("descripcion"));
-                routingContext.response()
-                        .putHeader("content-type", "application/json; charset=utf-8")
-                        .end(Json.encodePrettily(instrumento));
-            }
+            jdbc.getConnection(ar -> {
+                actualizar(id, json, ar.result(), (instrumento) -> {
+                    if (instrumento.failed()) {
+                        routingContext.response().setStatusCode(404).end();
+                    } else {
+                        routingContext.response()
+                                .putHeader("content-type", "application/json; charset=utf-8")
+                                .end(Json.encodePrettily(instrumento.result()));
+                    }
+                    ar.result().close();
+                });
+            });
         }
     }
 
@@ -139,16 +207,54 @@ public class MiPrimerVerticle extends AbstractVerticle {
         if (id == null) {
             routingContext.response().setStatusCode(404).end();
         } else {
-            final Integer idInteger = Integer.valueOf(id);
-            Instrumento instrumento = instrumentos.get(idInteger);
-            if (instrumento == null) {
-                routingContext.response().setStatusCode(404).end();
-            } else {
-                routingContext.response()
-                        .putHeader("content-type", "application/json; charset=utf-8")
-                        .end(Json.encodePrettily(instrumento));
-            }
+            jdbc.getConnection(ar -> {
+               SQLConnection connection = ar.result();
+                select(id, connection, result -> {
+                    if (result.succeeded()) {
+                        routingContext.response()
+                                .setStatusCode(200)
+                                .putHeader("content-type", "application/json; charset=utf-8")
+                                .end(Json.encodePrettily(result.succeeded()));
+                    } else {
+                        routingContext.response().setStatusCode(404).end();
+                    }
+                    connection.close();
+                });
+            });
         }
+    }
+
+    private void select(String id, SQLConnection connection, Handler<AsyncResult<Instrumento>> resultHandler) {
+        connection.queryWithParams("SELECT * FROM instrumento WHERE id=?", new JsonArray().add(id), ar -> {
+           if (ar.failed()) {
+               resultHandler.handle(Future.failedFuture("Instrumento no encontrado"));
+           } else {
+               if (ar.result().getNumRows() >= 1) {
+                   resultHandler.handle(Future.succeededFuture(new Instrumento(ar.result().getRows().get(0))));
+               } else {
+                   resultHandler.handle(Future.failedFuture("Instrumento no encontrado"));
+               }
+           }
+        });
+    }
+
+    private void actualizar(String id, JsonObject contenido, SQLConnection connection,
+                        Handler<AsyncResult<Instrumento>> resultHandler) {
+        String sql = "UPDATE instrumento SET codigo=?, descripcion=? WHERE id=?";
+        connection.updateWithParams(sql, new JsonArray().add(contenido.getString("codigo"))
+                .add(contenido.getString("descripcion")).add(id),
+                resultado -> {
+                    if (resultado.failed()) {
+                        resultHandler.handle(Future.failedFuture("No se pudo actualizar el instrumento"));
+                        return;
+                    }
+                    if (resultado.result().getUpdated() == 0) {
+                        resultHandler.handle(Future.failedFuture("No se encontro el instrumento"));
+                    }
+                    resultHandler.handle(
+                            Future.succeededFuture(new Instrumento(Integer.getInteger(id),
+                                    contenido.getString("codigo"), contenido.getString("descripcion"))));
+                });
     }
 
     private void deleteInstrumento(RoutingContext routingContext) {
@@ -157,36 +263,44 @@ public class MiPrimerVerticle extends AbstractVerticle {
         if (id == null) {
             routingContext.response().setStatusCode(400).end(); //no se encuentra recurso
         } else {
-            Integer idInteger = Integer.valueOf(id);
-            instrumentos.remove(idInteger);
+            jdbc.getConnection(ar -> {
+                SQLConnection connection = ar.result();
+                connection.execute("DELETE FROM instrumento WHERE id='" + id + "'",
+                        result -> {
+                            routingContext.response().setStatusCode(204).end(); //NO - CONTENT
+                            connection.close();
+                        });
+            });
         }
-        routingContext.response().setStatusCode(204).end(); //NO - CONTENT
     }
 
     private void addInstrumento(RoutingContext routingContext) {
-        //obtengo el instrumento del request body
-        final Instrumento instrumento = Json.decodeValue(routingContext.getBodyAsString(), Instrumento.class);
-        instrumentos.put(instrumento.getId(), instrumento);
-        routingContext.response()
-                .setStatusCode(201) //creado
-                .putHeader("content-type", "application/json; charset=utf-8")
-                .end(Json.encodePrettily(instrumento));
-    }
-
-    private void createSomeData() {
-        //crear algunos instrumentos
-        Instrumento ins1 = new Instrumento("GALC", "Galicia 24hs");
-        instrumentos.put(ins1.getId(), ins1);
-        Instrumento ins2 = new Instrumento("EDEN", "Edenor 72hs");
-        instrumentos.put(ins2.getId(), ins2);
+        jdbc.getConnection(ar -> {
+            //obtengo el instrumento del request body
+            final Instrumento instrumento = Json.decodeValue(routingContext.getBodyAsString(), Instrumento.class);
+            SQLConnection connection = ar.result();
+            insertarDatos(instrumento, connection,
+                    (r) -> routingContext.response()
+                            .setStatusCode(201) //creado
+                            .putHeader("content-type", "application/json; charset=utf-8")
+                            .end(Json.encodePrettily(r.result())));
+            connection.close();
+        });
     }
 
     private void getAll(RoutingContext routingContext) {
-        routingContext.response()
-                .putHeader("content-type", "application/json; charset=utf-8")
-                .end(Json.encodePrettily(instrumentos.values()));
+        jdbc.getConnection(ar -> {
+            SQLConnection connection = ar.result();
+            connection.query("SELECT * FROM instrumento", resultado -> {
+                //se agrego un constructor de json
+                List<Instrumento> instrumentos = resultado.result().getRows()
+                        .stream().map(Instrumento::new).collect(Collectors.toList());
+                routingContext.response()
+                        .putHeader("content-type", "application/json; charset=utf-8")
+                        .end(Json.encodePrettily(instrumentos));
+                connection.close();
+            });
+        });
     }
 
-    //4 podemos implementar el método close() pero no es muy recomendable
-    //por el momento dejo que lo haga vertx
 }
