@@ -214,7 +214,7 @@ public class MiPrimerVerticle extends AbstractVerticle {
                         routingContext.response()
                                 .setStatusCode(200)
                                 .putHeader("content-type", "application/json; charset=utf-8")
-                                .end(Json.encodePrettily(result.succeeded()));
+                                .end(Json.encodePrettily(result.result()));
                     } else {
                         routingContext.response().setStatusCode(404).end();
                     }
