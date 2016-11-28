@@ -5,6 +5,8 @@ Una de las características esenciales de la aplicaciones reactivas es la manipu
 Vert.x es asincrónico por lo cual no podemos bloquear/esperar el resultado de una operación, pero si se puede ser notificado cuando esta finalice.
 La notificación, gracias a vert.x, ocurre en el mismo thread (event loop).
 Por ello el código va a invocar al cliente MongoDB y pasandole un callback que será invocado cuando el resultado este disponible.
+La invocación al cliente MongoDB es no bloqueante y devuelve el resultado inmediatamente.
+Este modelo no requiere de sincronización, el manejo es por un solo single thread por ello no es necesaria la misma.
 
 
 * Requiere Maven y Java 8 instalado y configurado.
@@ -49,3 +51,6 @@ Por ello el código va a invocar al cliente MongoDB y pasandole un callback que 
     * Agrego un profile para Windows para ejecutar los test de integración
 
 * Utilizar MongoDB como medio de persistencia:
+    * Para los test se utiliza un instancia de MongoDB Server.
+    * Para los test de integración se utiliza un plugin de maven 'embedmongo-maven-plugin'
+
