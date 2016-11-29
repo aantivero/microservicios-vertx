@@ -10,6 +10,7 @@ import io.vertx.core.json.Json;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.jdbc.JDBCClient;
+import io.vertx.ext.mongo.MongoClient;
 import io.vertx.ext.sql.SQLConnection;
 import io.vertx.ext.sql.UpdateResult;
 import io.vertx.ext.web.Router;
@@ -29,15 +30,16 @@ import java.util.stream.Collectors;
  */
 public class MiPrimerVerticle extends AbstractVerticle {
 
-    private JDBCClient jdbc;
+    private MongoClient mongo;
+    public static final String COLLECTION = "instrumentos";
 
     //3 este método es llamado cuando el verticle es deployado
     //5 el Future se utiliza para indicar si fue completado o no
     @Override
     public void start(Future<Void> future) {
-        //crear e inicializar la instancia JDBCClient
-        //en configuracion agregar los parametros url y driver_class
-        jdbc = JDBCClient.createShared(vertx, config(), "instrumentos-datos");
+        //instancia MongoClient,
+        // con este cliente no se necesita manejar la conexion sino que lo realiza internamente
+        mongo = MongoClient.createShared(vertx, config());
 
         //iniciar la aplicacion asincronicamente
         /**
@@ -46,75 +48,57 @@ public class MiPrimerVerticle extends AbstractVerticle {
          *      2) realizar tarea
          *      3) llamar al proximo paso
          */
-        iniciarBackend(
+        crearDatos(
+                (nothing) -> iniciarAplicacionWeb(
+                        (http) -> completarInicio(http, future)
+                ),future);
+
+        /*iniciarBackend(
                 (connection) -> crearDatos(connection,
                         (nothing) -> iniciarAplicacionWeb(
                                 (http) -> completarInicio(http, future)
                         ), future
-                ), future);
+                ), future);*/
     }
 
     @Override
     public void stop() throws Exception {
-        //cierre de la conexion
-        jdbc.close();
-    }
-
-    //recupera el SQLConnection y luego llama al proximo (next step)
-    private void iniciarBackend(Handler<AsyncResult<SQLConnection>> next, Future<Void> future) {
-        jdbc.getConnection(ar -> {
-            if (ar.failed()) {
-                future.fail(ar.cause());
-            } else {
-                next.handle(Future.succeededFuture(ar.result()));
-            }
-        });
+        //cierre el driver mongo
+        mongo.close();
     }
 
     //crear la tabla (si no existe) y algunos datos
-    private void crearDatos(AsyncResult<SQLConnection> result,
-                            Handler<AsyncResult<Void>> next, Future<Void> future) {
-        if (result.failed()) {
-            future.fail(result.cause());
-        } else {
-            //siempre chequea en base a la conexion
-            SQLConnection connection = result.result();
-            connection.execute(
-                    "CREATE TABLE IF NOT EXISTS instrumento (id INTEGER IDENTITY, " +
-                            "codigo varchar(20), descripcion varchar(100))",
-                    ar -> {
-                        if (ar.failed()) {
-                            future.fail(ar.cause());
-                            connection.close();
-                            return;
-                        }
-                        connection.query("SELECT * FROM instrumento", select -> {
-                            if (select.failed()) {
-                                future.fail(select.cause());
-                                connection.close();
-                                return;
-                            }
-                            //si no hay datos en la tabla inserta 2 instrumentos
-                            if (select.result().getNumRows() == 0) {
-                                insertarDatos(
-                                        new Instrumento("GALC", "Galicia 24hs"),
-                                        connection,
-                                        (v) -> insertarDatos(
-                                                new Instrumento("EDEN", "Edenor 72hs"),
-                                                connection,
-                                                (r) -> {
-                                                    next.handle(Future.<Void>succeededFuture());
-                                                    connection.close();
-                                                }
-                                        )
-                                );
-                            } else {
-                                next.handle(Future.<Void>succeededFuture());
-                                connection.close();
-                            }
-                        });
-                    });
-        }
+    private void crearDatos(Handler<AsyncResult<Void>> next, Future<Void> future) {
+        Instrumento gal = new Instrumento("GALC", "Galicia 24hs");
+        Instrumento eden = new Instrumento("EDEN", "Edenor 72hs");
+        System.out.println(gal.toJson());
+        System.out.println(eden.toJson());
+
+        mongo.count(COLLECTION, new JsonObject(), count -> {
+           if (count.succeeded()) {
+               if (count.result() == 0 ){
+                   //no hay datos en la coleccion de instrumentos
+                   mongo.insert(COLLECTION, gal.toJson(), handler -> {
+                       if (handler.failed()) {
+                           future.fail(handler.cause());
+                       } else {
+                           mongo.insert(COLLECTION, eden.toJson(), handler2 -> {
+                              if (handler2.failed()) {
+                                  future.failed();
+                              } else {
+                                  next.handle(Future.<Void>succeededFuture());
+                              }
+                           });
+                       }
+                   });
+               } else {
+                   next.handle(Future.<Void>succeededFuture());
+               }
+           } else {
+               //existio algun erro
+               future.fail(count.cause());
+           }
+        });
     }
 
     private void insertarDatos(Instrumento instrumento, SQLConnection connection, Handler<AsyncResult<Instrumento>> next) {
