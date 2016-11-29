@@ -7,20 +7,14 @@ import io.vertx.core.Handler;
 import io.vertx.core.http.HttpServer;
 import io.vertx.core.http.HttpServerResponse;
 import io.vertx.core.json.Json;
-import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
-import io.vertx.ext.jdbc.JDBCClient;
 import io.vertx.ext.mongo.MongoClient;
-import io.vertx.ext.sql.SQLConnection;
-import io.vertx.ext.sql.UpdateResult;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.ext.web.handler.StaticHandler;
 
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -52,13 +46,6 @@ public class MiPrimerVerticle extends AbstractVerticle {
                 (nothing) -> iniciarAplicacionWeb(
                         (http) -> completarInicio(http, future)
                 ),future);
-
-        /*iniciarBackend(
-                (connection) -> crearDatos(connection,
-                        (nothing) -> iniciarAplicacionWeb(
-                                (http) -> completarInicio(http, future)
-                        ), future
-                ), future);*/
     }
 
     @Override
@@ -67,13 +54,15 @@ public class MiPrimerVerticle extends AbstractVerticle {
         mongo.close();
     }
 
-    //crear la tabla (si no existe) y algunos datos
+    //verficar la existencia de la coleccion y si existen datos
     private void crearDatos(Handler<AsyncResult<Void>> next, Future<Void> future) {
         Instrumento gal = new Instrumento("GALC", "Galicia 24hs");
         Instrumento eden = new Instrumento("EDEN", "Edenor 72hs");
         System.out.println(gal.toJson());
         System.out.println(eden.toJson());
 
+        //verifico que existan datos en la coleccion de instrumentos
+        //le paso por parametro un objeto JsonObject vacio. Es equivalente al Select * from
         mongo.count(COLLECTION, new JsonObject(), count -> {
            if (count.succeeded()) {
                if (count.result() == 0 ){
@@ -99,26 +88,6 @@ public class MiPrimerVerticle extends AbstractVerticle {
                future.fail(count.cause());
            }
         });
-    }
-
-    private void insertarDatos(Instrumento instrumento, SQLConnection connection, Handler<AsyncResult<Instrumento>> next) {
-        String sql = "INSERT INTO instrumento (codigo, descripcion) VALUES ?, ?";
-        //ejecuta el update con parametros, pasando los valores. este impide el SQL injection
-        connection.updateWithParams(sql,
-                new JsonArray().add(instrumento.getCodigo()).add(instrumento.getDescripcion()),
-                (ar) -> {
-                    if (ar.failed()) {
-                        next.handle(Future.failedFuture(ar.cause()));
-                        return;
-                    }
-                    UpdateResult result = ar.result();
-
-                    //crea un nuevo objeto de Instrumento con el id generado
-                    Instrumento instrumentoNuevo = new Instrumento(result.getKeys().getInteger(0),
-                            instrumento.getCodigo(), instrumento.getDescripcion());
-
-                    next.handle(Future.succeededFuture(instrumentoNuevo));
-                });
     }
 
     private void iniciarAplicacionWeb(Handler<AsyncResult<HttpServer>> next) {
@@ -171,17 +140,19 @@ public class MiPrimerVerticle extends AbstractVerticle {
         if (id == null || json == null) {
             routingContext.response().setStatusCode(400).end();
         } else {
-            jdbc.getConnection(ar -> {
-                actualizar(id, json, ar.result(), (instrumento) -> {
-                    if (instrumento.failed()) {
-                        routingContext.response().setStatusCode(404).end();
-                    } else {
-                        routingContext.response()
-                                .putHeader("content-type", "application/json; charset=utf-8")
-                                .end(Json.encodePrettily(instrumento.result()));
-                    }
-                    ar.result().close();
-                });
+            mongo.updateCollection(COLLECTION,
+                    new JsonObject().put("_id", id),//seleccion del documento
+                    new JsonObject().put("$set", json),//update syntax
+                    resultado -> {
+                        if (resultado.failed()) {
+                            routingContext.response().setStatusCode(404).end();
+                        } else {
+                            routingContext.response()
+                                    .putHeader("content-type", "application/json; charset=utf-8")
+                                    .end(Json.encodePrettily(
+                                            new Instrumento(id, json.getString("codigo"), json.getString("descripcion")))
+                                    );
+                        }
             });
         }
     }
@@ -191,54 +162,22 @@ public class MiPrimerVerticle extends AbstractVerticle {
         if (id == null) {
             routingContext.response().setStatusCode(404).end();
         } else {
-            jdbc.getConnection(ar -> {
-               SQLConnection connection = ar.result();
-                select(id, connection, result -> {
-                    if (result.succeeded()) {
-                        routingContext.response()
-                                .setStatusCode(200)
-                                .putHeader("content-type", "application/json; charset=utf-8")
-                                .end(Json.encodePrettily(result.result()));
-                    } else {
-                        routingContext.response().setStatusCode(404).end();
-                    }
-                    connection.close();
-                });
+            mongo.findOne(COLLECTION, new JsonObject().put("_id", id), null, resultado -> {
+               if (resultado.succeeded()) {
+                   if (resultado.result() == null) {
+                       routingContext.response().setStatusCode(404).end();
+                       return;
+                   }
+                   Instrumento instrumento = new Instrumento(resultado.result());
+                   routingContext.response()
+                           .setStatusCode(200)
+                           .putHeader("content-type", "application/json; charset=utf-8")
+                           .end(Json.encodePrettily(instrumento));
+               } else {
+                   routingContext.response().setStatusCode(404).end();
+               }
             });
         }
-    }
-
-    private void select(String id, SQLConnection connection, Handler<AsyncResult<Instrumento>> resultHandler) {
-        connection.queryWithParams("SELECT * FROM instrumento WHERE id=?", new JsonArray().add(id), ar -> {
-           if (ar.failed()) {
-               resultHandler.handle(Future.failedFuture("Instrumento no encontrado"));
-           } else {
-               if (ar.result().getNumRows() >= 1) {
-                   resultHandler.handle(Future.succeededFuture(new Instrumento(ar.result().getRows().get(0))));
-               } else {
-                   resultHandler.handle(Future.failedFuture("Instrumento no encontrado"));
-               }
-           }
-        });
-    }
-
-    private void actualizar(String id, JsonObject contenido, SQLConnection connection,
-                        Handler<AsyncResult<Instrumento>> resultHandler) {
-        String sql = "UPDATE instrumento SET codigo=?, descripcion=? WHERE id=?";
-        connection.updateWithParams(sql, new JsonArray().add(contenido.getString("codigo"))
-                .add(contenido.getString("descripcion")).add(id),
-                resultado -> {
-                    if (resultado.failed()) {
-                        resultHandler.handle(Future.failedFuture("No se pudo actualizar el instrumento"));
-                        return;
-                    }
-                    if (resultado.result().getUpdated() == 0) {
-                        resultHandler.handle(Future.failedFuture("No se encontro el instrumento"));
-                    }
-                    resultHandler.handle(
-                            Future.succeededFuture(new Instrumento(Integer.getInteger(id),
-                                    contenido.getString("codigo"), contenido.getString("descripcion"))));
-                });
     }
 
     private void deleteInstrumento(RoutingContext routingContext) {
@@ -247,43 +186,33 @@ public class MiPrimerVerticle extends AbstractVerticle {
         if (id == null) {
             routingContext.response().setStatusCode(400).end(); //no se encuentra recurso
         } else {
-            jdbc.getConnection(ar -> {
-                SQLConnection connection = ar.result();
-                connection.execute("DELETE FROM instrumento WHERE id='" + id + "'",
-                        result -> {
-                            routingContext.response().setStatusCode(204).end(); //NO - CONTENT
-                            connection.close();
-                        });
-            });
+            //removeDocument para eliminar al que cumple con la condicion
+            mongo.removeDocument(COLLECTION, new JsonObject().put("_id", id), resultado ->
+                routingContext.response().setStatusCode(204).end()
+            );
         }
     }
 
     private void addInstrumento(RoutingContext routingContext) {
-        jdbc.getConnection(ar -> {
-            //obtengo el instrumento del request body
-            final Instrumento instrumento = Json.decodeValue(routingContext.getBodyAsString(), Instrumento.class);
-            SQLConnection connection = ar.result();
-            insertarDatos(instrumento, connection,
-                    (r) -> routingContext.response()
-                            .setStatusCode(201) //creado
-                            .putHeader("content-type", "application/json; charset=utf-8")
-                            .end(Json.encodePrettily(r.result())));
-            connection.close();
-        });
+        final Instrumento instrumento = Json.decodeValue(routingContext.getBodyAsString(), Instrumento.class);
+        mongo.insert(COLLECTION, instrumento.toJson(), resultado ->
+            routingContext.response()
+                    .setStatusCode(201)
+                    .putHeader("content-type", "application/json; charset=utf-8")
+                    .end(Json.encodePrettily(instrumento.setId(resultado.result())))
+        );
     }
 
     private void getAll(RoutingContext routingContext) {
-        jdbc.getConnection(ar -> {
-            SQLConnection connection = ar.result();
-            connection.query("SELECT * FROM instrumento", resultado -> {
-                //se agrego un constructor de json
-                List<Instrumento> instrumentos = resultado.result().getRows()
-                        .stream().map(Instrumento::new).collect(Collectors.toList());
-                routingContext.response()
-                        .putHeader("content-type", "application/json; charset=utf-8")
-                        .end(Json.encodePrettily(instrumentos));
-                connection.close();
-            });
+        //devuelve todos los instrumentos de la coleccion, igual que el método count le pasamos un JsonObject vacio
+        mongo.find(COLLECTION, new JsonObject(), resultado -> {
+            //se obtiene una lista de JSON
+            List<JsonObject> objetos = resultado.result();
+            //crear un lista de instrumentos mapeados a la coleccion resultante
+            List<Instrumento> instrumentos = objetos.stream().map(Instrumento::new).collect(Collectors.toList());
+            routingContext.response()
+                    .putHeader("content-type", "application/json; charset=utf-8")
+                    .end(Json.encodePrettily(instrumentos));
         });
     }
 
