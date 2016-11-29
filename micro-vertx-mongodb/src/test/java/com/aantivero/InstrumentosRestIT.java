@@ -31,11 +31,11 @@ public class InstrumentosRestIT {
 
     @Test
     public void checkRetornarInstrumentoIndividual() {
-        final int id = get("/api/instrumentos").then()
+        final String id = get("/api/instrumentos").then()
                 .assertThat()
                 .statusCode(200)
                 .extract()
-                .jsonPath().getInt("find { it.descripcion=='Galicia 24hs' }.id");
+                .jsonPath().getString("find { it.descripcion=='Galicia 24hs' }.id");
         get("/api/instrumentos/"+id).then()
                 .assertThat()
                 .statusCode(200)
@@ -54,7 +54,7 @@ public class InstrumentosRestIT {
                 .thenReturn().as(Instrumento.class);
         assertThat(instrumento.getCodigo()).isEqualToIgnoringCase("ALA");
         assertThat(instrumento.getDescripcion()).isEqualToIgnoringCase("Aluar Metalurgica");
-        assertThat(instrumento.getId()).isNotZero().isPositive();
+        assertThat(instrumento.getId()).isNotEmpty();
 
         //chequear que se creo y que son válidos los parámetros
         get("/api/instrumentos/" + instrumento.getId())
@@ -72,7 +72,7 @@ public class InstrumentosRestIT {
                 .statusCode(204);
 
         //el instrumento no existe mas
-        get("/api/instrumentsos/" + instrumento.getId())
+        get("/api/instrumentos/" + instrumento.getId())
                 .then()
                 .assertThat()
                 .statusCode(404);
